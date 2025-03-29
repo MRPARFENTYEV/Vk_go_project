@@ -13,4 +13,4 @@ services:
     build: .
     command: go test -v ./main_test.go
     depends_on:
-      - vk_go
+      - vk_gogit config --global user.email
