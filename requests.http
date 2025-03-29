@@ -1,0 +1,25 @@
+### Создать голосование
+POST http://localhost:8080/create
+Content-Type: application/json
+
+{
+  "id": "1",
+  "question": "Ваш любимый язык?",
+  "options": {
+    "Go": 0,
+    "Python": 0,
+    "Java": 0
+  }
+}
+
+### Проголосовать
+POST http://localhost:8080/vote
+Content-Type: application/json
+
+{
+  "poll_id": "1",
+  "option": "Go"
+}
+
+### Получить результаты
+GET http://localhost:8080/results?id=1
