@@ -1,16 +1,75 @@
-
+version: '3.8'
 
 services:
-  vk_go:
+  tarantool:
+    image: tarantool/tarantool:2.11.5
+    ports:
+      - "3301:3301"
+    volumes:
+      - tarantool_data:/var/lib/tarantool
+    command: >
+      sh -c "tarantool -e '
+        -- Настройка логов и параметров
+        box.cfg{
+          listen = \"3301\",
+          log_level = 5,
+          log = \"/var/lib/tarantool/tarantool.log\",
+          wal_mode = \"none\",
+          memtx_memory = 256 * 1024 * 1024,
+          worker_pool_threads = 4
+        }
+
+        -- Создание пользователя (с проверкой)
+        local user_exists = pcall(function()
+          return box.schema.user.exists(\"admin\")
+        end)
+        
+        if not user_exists or not box.schema.user.exists(\"admin\") then
+          box.schema.user.create(\"admin\", {password = \"admin\"})
+          box.schema.user.grant(\"admin\", \"read,write,execute\", \"universe\")
+        end
+
+        -- Создание пространства polls
+        if not box.space.polls then
+          box.schema.space.create(\"polls\", {
+            format = {
+              {name = \"id\", type = \"string\"},
+              {name = \"question\", type = \"string\"},
+              {name = \"options\", type = \"map\"},
+              {name = \"closed\", type = \"boolean\"}
+            }
+          })
+          box.space.polls:create_index(\"primary\", {parts = {\"id\"}})
+        end
+
+        -- Явный пинг для healthcheck
+        box.schema.func.create(\"healthcheck\", {
+          if_not_exists = true,
+          body = [[function() return \"OK\" end]]
+        })
+        box.schema.user.grant(\"guest\", \"execute\", \"function\", \"healthcheck\")
+
+        -- Вечный цикл
+        require(\"fiber\").sleep(0.1)
+        while true do end
+      '"
+    healthcheck:
+      test: ["CMD", "tarantool", "-e", "return box.func.healthcheck:call()"]
+      interval: 10s
+      timeout: 10s
+      start_period: 20s
+      retries: 5
+
+  poll-app:
     build: .
     ports:
       - "8080:8080"
-    volumes:
-      - ./requests.http:/app/requests.http
+    environment:
+      TARANTOOL_ADDR: "tarantool:3301"
+    depends_on:
+      tarantool:
+        condition: service_healthy
     restart: unless-stopped
 
-  tests:
-    build: .
-    command: go test -v ./main_test.go
-    depends_on:
-      - vk_gogit config --global user.email
+volumes:
+  tarantool_data:

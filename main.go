@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"sync"
+
+	"github.com/tarantool/go-tarantool"
 )
 
 type Poll struct {
@@ -21,9 +23,41 @@ type VoteRequest struct {
 }
 
 var (
-	polls = make(map[string]*Poll)
-	mu    sync.Mutex
+	conn *tarantool.Connection
+	mu   sync.Mutex
 )
+
+func init() {
+	// Инициализация подключения к Tarantool
+	var err error
+	conn, err = tarantool.Connect("127.0.0.1:3301", tarantool.Opts{
+		User: "admin",
+		Pass: "admin",
+	})
+	if err != nil {
+		log.Fatalf("Failed to connect to Tarantool: %v", err)
+	}
+
+	// Создаем пространство (аналог таблицы) для хранения опросов
+	_, err = conn.Eval(`
+		box.schema.create_space('polls', {
+			if_not_exists = true,
+			format = {
+				{name = 'id', type = 'string'},
+				{name = 'question', type = 'string'},
+				{name = 'options', type = 'map'},
+				{name = 'closed', type = 'boolean'}
+			}
+		})
+		box.space.polls:create_index('primary', {
+			parts = {'id'},
+			if_not_exists = true
+		})
+	`, []interface{}{})
+	if err != nil {
+		log.Printf("Warning: space creation failed: %v", err)
+	}
+}
 
 func createPollHandler(w http.ResponseWriter, r *http.Request) {
 	var poll Poll
@@ -32,9 +66,17 @@ func createPollHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
-	polls[poll.ID] = &poll
-	mu.Unlock()
+	// Сохраняем в Tarantool
+	_, err := conn.Insert("polls", []interface{}{
+		poll.ID,
+		poll.Question,
+		poll.Options,
+		poll.Closed,
+	})
+	if err != nil {
+		http.Error(w, "Failed to save poll", http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(poll)
@@ -50,9 +92,23 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	poll, exists := polls[req.PollID]
-	if !exists || poll.Closed {
-		http.Error(w, "Poll not found or closed", http.StatusNotFound)
+	// Получаем опрос из Tarantool
+	resp, err := conn.Select("polls", "primary", 0, 1, tarantool.IterEq, []interface{}{req.PollID})
+	if err != nil || len(resp.Data) == 0 {
+		http.Error(w, "Poll not found", http.StatusNotFound)
+		return
+	}
+
+	pollData := resp.Data[0].([]interface{})
+	poll := Poll{
+		ID:       pollData[0].(string),
+		Question: pollData[1].(string),
+		Options:  pollData[2].(map[string]int),
+		Closed:   pollData[3].(bool),
+	}
+
+	if poll.Closed {
+		http.Error(w, "Poll is closed", http.StatusForbidden)
 		return
 	}
 
@@ -61,20 +117,34 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Обновляем голос в Tarantool
 	poll.Options[req.Option]++
+	_, err = conn.Update("polls", "primary", []interface{}{req.PollID}, []interface{}{
+		[]interface{}{"=", 2, poll.Options}, // Обновляем поле options (индекс 2)
+	})
+	if err != nil {
+		http.Error(w, "Failed to update poll", http.StatusInternalServerError)
+		return
+	}
+
 	json.NewEncoder(w).Encode(poll)
 }
 
 func getResultsHandler(w http.ResponseWriter, r *http.Request) {
 	pollID := r.URL.Query().Get("id")
 
-	mu.Lock()
-	poll, exists := polls[pollID]
-	mu.Unlock()
-
-	if !exists {
+	resp, err := conn.Select("polls", "primary", 0, 1, tarantool.IterEq, []interface{}{pollID})
+	if err != nil || len(resp.Data) == 0 {
 		http.Error(w, "Poll not found", http.StatusNotFound)
 		return
+	}
+
+	pollData := resp.Data[0].([]interface{})
+	poll := Poll{
+		ID:       pollData[0].(string),
+		Question: pollData[1].(string),
+		Options:  pollData[2].(map[string]int),
+		Closed:   pollData[3].(bool),
 	}
 
 	json.NewEncoder(w).Encode(poll)
@@ -86,14 +156,17 @@ func closePollHandler(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	poll, exists := polls[pollID]
-	if !exists {
-		http.Error(w, "Poll not found", http.StatusNotFound)
+	// Обновляем статус опроса в Tarantool
+	_, err := conn.Update("polls", "primary", []interface{}{pollID}, []interface{}{
+		[]interface{}{"=", 3, true}, // Устанавливаем closed=true (индекс 3)
+	})
+	if err != nil {
+		http.Error(w, "Failed to close poll", http.StatusInternalServerError)
 		return
 	}
 
-	poll.Closed = true
-	json.NewEncoder(w).Encode(poll)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "poll closed"})
 }
 
 func main() {

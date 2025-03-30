@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "920258354fa0d8b5",
+        "id": "755102ad1ab24a7d",
         "type": "tabs",
         "children": [
           {
-            "id": "0e801c2194f75bac",
+            "id": "7f942b4e2197c5d2",
             "type": "leaf",
             "state": {
               "type": "empty",
@@ -37,7 +37,7 @@
               "type": "file-explorer",
               "state": {
                 "sortOrder": "alphabetical",
-                "autoReveal": false
+                "autoReveal": true
               },
               "icon": "lucide-folder-closed",
               "title": "Files"
@@ -74,8 +74,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 300
   },
   "right": {
     "id": "8c7fd85ed611f521",
@@ -162,8 +161,14 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "0e801c2194f75bac",
+  "active": "7f942b4e2197c5d2",
   "lastOpenFiles": [
+    "2025-03-29.md",
+    "Untitled 2.md",
+    "Untitled 1.md",
+    "Untitled.canvas",
+    "Untitled.md",
+    "Untitled",
     "Сервис для голосования.md"
   ]
 }
