@@ -15,7 +15,7 @@ GO,  Go-тесты, Docker
 2) Перейдите в папку проекта: cd vk_go 
 3) Соберите контейнер и запустите сервис одной командой: docker-compose up -d --build
 #### API вариации:
-POST: /create - создание голосования
-POST:  /vote - отдать голос
-GET: /results?id={id} - посмотреть результаты
-POST:  /close&id={id} - отдать голос
+1)POST: /create - создание голосования
+2)POST:  /vote - отдать голос
+3)GET: /results?id={id} - посмотреть результаты
+4)POST:  /close&id={id} - отдать голос
