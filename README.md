@@ -14,8 +14,8 @@ GO,  Go-тесты, Docker
 1) Клонируйте проект: git clone https://github.com/MRPARFENTYEV/Vk_go_project.git
 2) Перейдите в папку проекта: cd vk_go 
 3) Соберите контейнер и запустите сервис одной командой: docker-compose up -d --build
-#### API вариации:
-1)POST: /create - создание голосования
-2)POST:  /vote - отдать голос
-3)GET: /results?id={id} - посмотреть результаты
-4)POST:  /close&id={id} - отдать голос
+#### API вариации:  
+POST: /create - создание голосования  
+POST:  /vote - отдать голос  
+GET: /results?id={id} - посмотреть результаты  
+POST:  /close&id={id} - отдать голос
